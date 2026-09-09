@@ -68,7 +68,7 @@ em vez de criarmos com `new ConteudoRepository()`. O que exatamente o Spring faz
 injetar um bean, e por que isso não funcionaria com um `new` comum?
 
 **Resposta:**  
-No Spring Data JPA, `ConteudoRepository` e `UsuarioRepository` sao apenas interfaces Java que nao possuem implementacao concreta escrita pelo desenvolvedor. Em Java, e impossivel instanciar uma interface diretamente utilizando o operador `new`. Quando a aplicacao Spring Boot sobe, o container de Inversao de Controle (IoC) escaneia essas interfaces e cria dinamicamente em tempo de execucao uma classe proxy concreta via reflexao. Essa classe gerada pelo framework embute toda a infraestrutura de conexao JDBC, gerenciamento de sessoes do `EntityManager` do Hibernate, pool de conexoes e controle transacional. Ao anotar o atributo com `@Autowired` no `ConteudoController`, o Spring injeta esse Bean proxy gerenciado em escopo Singleton. Se utilizassemos `new ConteudoRepository()`, o codigo sequer compilaria; e caso instanciassemos uma classe manual sem o Spring, nao haveria conexao gerenciada com o banco Oracle, resultando em `NullPointerException` em qualquer chamada como `findById` ou `save`.
+O primeiro motivo é bem simples: ConteudoRepository é uma interface Java, então nem sequer é possível dar new ConteudoRepository(), pois interfaces não podem ser instanciadas diretamente. O que o Spring faz por baixo dos panos é criar uma classe concreta em tempo de execução que implementa essa interface, já com toda a conexão com o banco Oracle configurada e pronta para salvar e buscar dados. Quando colocamos a anotação @Autowired no ConteudoController, o Spring simplesmente entrega essa instância pronta para o controller usar. Se tentássemos usar um new comum, além de não compilar, não haveria nenhuma conexão com o banco configurada, gerando NullPointerException assim que chamássemos qualquer método como findById ou save.
 
 ### 2. JDBC vs Spring Data JPA (Aulas 12 e 13)
 Na Aula 12 escrevemos um `ProdutoDAO` na mão com `Connection`, `PreparedStatement` e
@@ -77,7 +77,7 @@ duas abordagens: o que o Spring Data JPA automatiza, o que o JDBC/DAO ainda reso
 melhor, e como o `findByCategoria` consegue funcionar sem implementação.
 
 **Resposta:**  
-O Spring Data JPA automatiza todo o codigo repetitivo (boilerplate) da camada de dados: abre e fecha conexoes, cria e parametriza `PreparedStatements`, itera linha a linha sobre o `ResultSet` e faz o mapeamento objeto-relacional (ORM) convertendo tabelas relacionais em entidades Java como `Conteudo` e `Usuario`. Em contrapartida, o JDBC tradicional com DAO manual ainda e insubstituivel quando se necessita de performance extrema em processamento em lote (Batch Processing de milhares de registros por segundo), consultas analiticas muito customizadas com multiplos joins/subqueries ou quando e preciso ter controle milimetrico sobre cursores e transacoes de baixo nivel no Oracle. O metodo `findByCategoria(String categoria)` funciona sem uma unica linha de codigo gracas ao recurso de Derived Query Methods: em tempo de inicializacao, o Spring Data quebra o nome do metodo usando convencoes semanticas (`findBy` + `Categoria`), identifica que a propriedade `categoria` existe na entidade `Conteudo` e gera em tempo de execucao a query JPQL/SQL equivalente (`SELECT c FROM Conteudo c WHERE c.categoria = :categoria`).
+O Spring Data JPA automatiza todo aquele trabalho repetitivo que fizemos na Aula 12: abrir e fechar conexões, montar comandos SQL no PreparedStatement, percorrer o ResultSet linha por linha e preencher os atributos de Conteudo ou Usuario na mão. Ele faz todo esse mapeamento sozinho. Por outro lado, o JDBC tradicional com DAO ainda é insubstituível quando precisamos de altíssima performance, como rodar consultas analíticas muito pesadas ou fazer inserções de milhares de registros em lote, onde o JPA seria mais lento. Já o método findByCategoria(String categoria) funciona porque o Spring lê o nome do método: ele reconhece o prefixo findBy e junta com o atributo categoria da entidade Conteudo, gerando a consulta SQL (WHERE categoria = ?) de forma automática em tempo de execução.
 
 ### 3. Exceções checked vs unchecked (Aula 11)
 A `ClassificacaoIndicativaException` estourava como um erro genérico do servidor,
@@ -86,7 +86,7 @@ sem mensagem útil para o cliente. Explique a diferença entre `extends Exceptio
 regra (classificação indicativa) chegar de forma clara ao cliente da API.
 
 **Resposta:**  
-Excecoes que herdam de `Exception` sao verificadas (*checked*): o compilador Java obriga que elas sejam tratadas com `try-catch` ou declaradas explicitamente na assinatura dos metodos com a clausula `throws`, gerando alto acoplamento entre as camadas. Ja as excecoes que herdam de `RuntimeException` sao nao verificadas (*unchecked*): representam condicoes anormais ou quebras de regras de negocio que podem propagar livremente pela pilha de execucao sem sujar as assinaturas dos metodos intermediarios. Originalmente, a `ClassificacaoIndicativaException` era checked e nao possuia interceptador no `GlobalExceptionHandler`, fazendo com que o Spring Boot a interpretasse como uma falha interna nao tratada do servidor, retornando HTTP 500 generico. A solucao foi alterar a classe para `extends RuntimeException`, remover os `throws` de `Usuario.alugar` e `AluguelController.alugar`, e cadastrar um metodo no `@RestControllerAdvice` anotado com `@ExceptionHandler(ClassificacaoIndicativaException.class)` que devolve o status HTTP 403 Forbidden (ou 400) com o JSON `{ "erro": e.getMessage() }`, entregando a mensagem descritiva diretamente ao consumidor da API.
+A diferença principal é que exceções que herdam de Exception são do tipo checked, o que obriga o código a tratá-las com try-catch ou declarar throws em todos os métodos por onde passam. Já as que herdam de RuntimeException são unchecked, permitindo que o erro suba livremente pela aplicação sem poluir as assinaturas dos métodos intermediários. No projeto, como a ClassificacaoIndicativaException era checked e não tinha interceptador, o Spring tratava o erro como uma falha interna inesperada e devolvia o status HTTP 500 genérico para o cliente. A solução foi mudar a classe para extends RuntimeException e cadastrar um método com @ExceptionHandler no GlobalExceptionHandler. Assim, quando um menor de idade tenta alugar um filme não permitido, a API captura a exceção e responde com status HTTP 403 Forbidden e um JSON contendo a mensagem exata da regra.
 
 ### 4. Sobrescrita vs sobrecarga (Aula 7)
 Um dos bugs compilava sem nenhum erro: o método da `Serie` parecia sobrescrever
@@ -94,7 +94,7 @@ Um dos bugs compilava sem nenhum erro: o método da `Serie` parecia sobrescrever
 override e overload nesse caso e por que a anotação `@Override` teria impedido o bug.
 
 **Resposta:**  
-Sobrescrita (*override*) e o mecanismo de polimorfismo dinâmico onde uma classe filha redefine um metodo herdado da classe pai, mantendo rigorosamente a mesma assinatura (mesmo nome, mesma quantidade e tipos de parametros e retorno compativel). Ja sobrecarga (*overload*) ocorre quando criamos metodos com o mesmo nome na mesma classe ou hierarquia, porem com listas de parametros diferentes (tipos ou quantidades distintas), sendo resolvidos estaticamente em tempo de compilacao. Na classe `Serie`, o metodo foi criado como `calcularPrecoAluguel(double desconto)`. Como recebia um argumento `double`, o compilador o considerou um metodo novo e independente, e nao uma sobrescrita do metodo sem argumentos definido em `Conteudo`. Quando o endpoint de aluguel invocava polimorficamente `conteudo.calcularPrecoAluguel()`, o Java executava o metodo da classe mae (que cobrava 9,90 ou 0,00), ignorando totalmente a regra de 4,90 por temporada. Se a anotacao `@Override` estivesse presente sobre o metodo com parametro, o compilador apontaria erro de compilacao imediato avisando que a superclasse nao possui um metodo com essa assinatura, impedindo o bug antes mesmo de subir a aplicacao.
+Sobrescrita (override) acontece quando uma classe filha reescreve um método herdado da mãe mantendo rigorosamente a mesma assinatura (mesmo nome, mesmos parâmetros e retorno compatível). Já a sobrecarga (overload) ocorre quando criamos um método com o mesmo nome, porém com parâmetros diferentes, virando um método novo e independente. Na classe Serie, o método estava declarado como calcularPrecoAluguel(double desconto). Como recebia esse argumento desconto, o compilador entendeu como sobrecarga e não como sobrescrita. Com isso, na hora do aluguel, o controller chamava o método da mãe Conteudo (sem parâmetros), ignorando o cálculo por temporadas da série. Se o desenvolvedor tivesse colocado a anotação @Override no método da Serie, o compilador teria acusado erro imediatamente, avisando que a mãe não possuía nenhum método com aquele parâmetro double.
 
 ### 5. Onde blindar o objeto? (Aulas 3, 4 e 13)
 Vimos bugs de dados inválidos aceitos (duração negativa, créditos negativos, campos
@@ -103,11 +103,12 @@ deve ficar? Justifique usando os bugs que você encontrou e explique por que val
 em um lugar não foi suficiente.
 
 **Resposta:**  
-A blindagem do modelo de dominio deve ser distribuida de acordo com o ciclo de vida dos dados:
-1. **Construtores:** Devem conter validacoes de existencia fundamental (invariantes de criacao), tais como impedir `duracaoMinutos <= 0`, `nome == null` ou `creditos < 0`. Isso assegura o principio do Fail-Fast, garantindo que nenhum objeto nasca em estado ilegal na memoria da JVM.
-2. **Setters:** Devem validar qualquer mutacao individual de atributo que ocorra durante o ciclo de vida do objeto (ex.: `setDuracaoMinutos` e `setCreditos`), garantindo que alteracoes posteriores nao corrompam o estado. Uma boa pratica e fazer o proprio construtor delegar a atribuicao aos setters (`setDuracaoMinutos(duracaoMinutos)`).
-3. **Metodos de Dominio:** Devem validar regras de transicao de estado que dependem do relacionamento entre multiplos objetos ou campos compostos. No projeto, o metodo `Usuario.alugar(Conteudo c)` e o lugar correto para checar se `!conteudo.isDisponivel()`, se `usuario.getIdade() < conteudo.getClassificacaoEtaria()` e se `temCreditosSuficientes(preco)`.
-Validar apenas em um lugar e insuficiente: se validarmos apenas no controller, metodos internos, servicos ou testes unitarios podem instanciar objetos invalidos diretamente via Java; se validarmos apenas no banco, teremos erros de SQL tardios e caros; e validar apenas no construtor permite corrupcao posterior via setters publicos.
+Cada tipo de validação protege um momento da vida do objeto:
+
+No construtor, validamos dados obrigatórios para que o objeto não nasça com valores ilegais na memória, como impedir duracaoMinutos <= 0 ou titulo nulo ao criar um Filme.
+Nos setters, validamos alterações individuais para evitar que o estado seja corrompido depois de criado, como fizemos no setCreditos(double) de Usuario para barrar valores negativos.
+Nos métodos de negócio do model, validamos regras que dependem de vários dados juntos, como no método Usuario.alugar(Conteudo c), que precisa checar ao mesmo tempo se o conteúdo está disponível, se o usuário tem a idade mínima e se possui saldo suficiente.
+Validar em apenas um lugar não basta: se validarmos só no controller, chamadas internas ou testes unitários em Java podem criar objetos inválidos; e validar só no banco gera erros de SQL tardios em vez de mensagens claras no sistema.
 
 ### 6. Abstração e interface (Aulas 8 e 9)
 `Conteudo` é abstrata e `Promocionavel` é uma interface. Explique a diferença de
@@ -116,11 +117,7 @@ passasse a ter promoções — quais classes/linhas seriam tocadas e quais ficar
 intactas? O que isso diz sobre o design do sistema?
 
 **Resposta:**  
-A classe abstrata `Conteudo` define a identidade estrutural e o nucleo comum do dominio atraves de uma relacao de heranca (*"e-um"*): todo Filme, Serie ou Documentario **e** um Conteudo, herdando atributos persistidos no banco (`id`, `titulo`, `categoria`, `duracaoMinutos`, `classificacaoEtaria`, `disponivel`) e sendo forcado a implementar a regra essencial de precificacao pelo metodo abstrato `calcularPrecoAluguel()`. Ja a interface `Promocionavel` define um comportamento/capacidade contratual opcional (*"faz-um"* ou *"pode-ser"*): apenas conteudos que possuem a capacidade de receber descontos a implementam. Se o `Documentario` passasse a ter promocoes:
-- **Classes modificadas:** Apenas `Documentario.java` (adicionando `implements Promocionavel` na declaracao da classe e implementando o metodo `@Override public double aplicarPromocao(double preco) { return preco * 0.8; }`).
-- **Classes que ficariam intactas:** `Conteudo.java`, `Filme.java`, `Serie.java`, `Usuario.java`, `ConteudoController.java`, `AluguelController.java`, `GlobalExceptionHandler.java` e todos os repositories.
-Isso evidencia o principio **Open/Closed Principle (OCP)** do SOLID: a arquitetura do StreamFIAP esta aberta para extensao (novos tipos e novas capacidades promocionais podem ser adicionados facilmente), mas fechada para modificacao, preservando os controladores e as entidades existentes sem risco de regressao de bugs.
-
+A classe abstrata Conteudo representa o que o objeto é (herança): ela centraliza os atributos comuns a qualquer item do catálogo (id, título, categoria, duração) e obriga todas as subclasses a implementarem o cálculo de aluguel. Já a interface Promocionavel define o que o objeto pode fazer (um comportamento opcional): apenas alguns tipos de conteúdo participam de promoções. Se o Documentario passasse a ter promoções, precisaríamos alterar apenas a classe Documentario.java, adicionando implements Promocionavel na declaração e escrevendo o método aplicarPromocao. Todas as outras classes (Conteudo, Filme, Serie, Usuario, controllers e repositories) continuariam 100% intactas. Isso demonstra que o sistema tem baixo acoplamento e segue o princípio de estar aberto para novas extensões sem risco de quebrar o que já funciona.
 ---
 
 ## Parte 4 — Espaço livre (opcional)
@@ -128,5 +125,4 @@ Isso evidencia o principio **Open/Closed Principle (OCP)** do SOLID: a arquitetu
 Alguma dificuldade, dúvida ou comentário sobre o checkpoint?
 
 ```
-O checkpoint proporcionou uma excelente experiência prática de code review e refatoração de código legado, simulando o dia a dia de uma equipe de desenvolvimento ao lidar com bugs de polimorfismo, convenções do Spring Boot e regras de negócio de domínio.
 ```
