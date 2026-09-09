@@ -1,4 +1,4 @@
-﻿# Checkpoint 4 — Bug Hunt StreamFIAP
+# Checkpoint 4 — Bug Hunt StreamFIAP
 
 > Copie este arquivo para a raiz do seu repositório com o nome **README.md**
 > e preencha todas as seções.
@@ -9,10 +9,10 @@
 
 | Integrante | RM | Turma |
 |---|---|---|
-| Guilherme Martins | RM | 2TDSS |
-| | | |
-| | | |
-| | | |
+| Guilherme Martins | 566570 | 2CCPX |
+| Gabriel Rodrigues | 566475 | 2CCPX |
+| Julia Lopes | 566557 | 2CCPX |
+| Claus Moreira | 566503 | 2CCPX |
 
 | Campo | |
 |---|---|
