@@ -117,7 +117,8 @@ passasse a ter promoções — quais classes/linhas seriam tocadas e quais ficar
 intactas? O que isso diz sobre o design do sistema?
 
 **Resposta:**  
-A classe abstrata Conteudo representa o que o objeto é (herança): ela centraliza os atributos comuns a qualquer item do catálogo (id, título, categoria, duração) e obriga todas as subclasses a implementarem o cálculo de aluguel. Já a interface Promocionavel define o que o objeto pode fazer (um comportamento opcional): apenas alguns tipos de conteúdo participam de promoções. Se o Documentario passasse a ter promoções, precisaríamos alterar apenas a classe Documentario.java, adicionando implements Promocionavel na declaração e escrevendo o método aplicarPromocao. Todas as outras classes (Conteudo, Filme, Serie, Usuario, controllers e repositories) continuariam 100% intactas. Isso demonstra que o sistema tem baixo acoplamento e segue o princípio de estar aberto para novas extensões sem risco de quebrar o que já funciona.
+A classe abstrata Conteudo representa o que o objeto é (herança): ela centraliza os atributos comuns a qualquer item do catálogo (id, título, categoria, duração) e obriga todas as subclasses a implementarem o cálculo de aluguel. Já a interface Promocionavel define o que o objeto pode fazer (um comportamento opcional): apenas alguns tipos de conteúdo participam de promoções. Se o Documentario passasse a ter promoções, precisaríamos alterar apenas a classe Documentario.java, adicionando implements Promocionavel na declaração e escrevendo o método aplicarPromocao. Todas as outras classes (Conteudo, Filme, Serie, Usuario, controllers e repositories) continuariam 100% intactas. Isso demonstra que o sistema tem baixo acoplamento e segue o princípio de estar aberto para novas extensões sem risco de quebrar o que já funciona
+
 ---
 
 ## Parte 4 — Espaço livre (opcional)
